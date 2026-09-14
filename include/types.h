@@ -19,7 +19,7 @@ typedef signed long long    int64_t;
 
 typedef uint32_t            size_t;
 typedef int32_t             ssize_t;
-typedef uint8_t             bool;
+typedef uint8_t             bool_t;
 
 #define true  1
 #define false 0

@@ -1,6 +1,2 @@
-build/ 
-*.img 
-*.o 
-*.bin 
-*.elf 
-*.iso 
+build/
+*.img

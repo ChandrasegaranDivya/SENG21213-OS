@@ -43,7 +43,7 @@ static const char sc_ascii_shift[128] = {
     0,   '*', 0, ' ', 0,
 };
 
-static bool shift_held = false;
+static bool_t shift_held = false;
 
 void kb_init(void) {
     /* Flush any stale data in the keyboard buffer */
