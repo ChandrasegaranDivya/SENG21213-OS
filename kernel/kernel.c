@@ -1,5 +1,4 @@
-/* =============================================================================
- * SENG21213-OS :: Main Kernel  (Stage 0 – Foundations)
+/* * SENG21213-OS :: Main Kernel  (Stage 0 – Foundations)
  * File   : kernel/kernel.c
  *
  * PURPOSE
@@ -24,6 +23,9 @@
 #include "vga.h"
 #include "keyboard.h"
 #include "../include/types.h"
+#include "process.h"
+#include "scheduler.h"
+#include "interrupts.h"
 
 /* ---------------------------------------------------------------------------
  * Forward declarations of shell commands
@@ -33,7 +35,11 @@ static void cmd_clear(void);
 static void cmd_about(void);
 static void cmd_echo(const char *args);
 static void cmd_mem(void);
+static void cmd_run(void);
+static void process_a(void);
+static void process_b(void);
 
+extern void start_first_process(uint32_t *stack_pointer);
 /* ---------------------------------------------------------------------------
  * Utility: minimal string helpers (no libc in a freestanding kernel!)
  * --------------------------------------------------------------------------*/
@@ -158,6 +164,63 @@ static void cmd_mem(void) {
     vga_puts_color("\n  TODO: Use BIOS int 0x15, EAX=0xE820 to get real memory map\n\n",
                    VGA_YELLOW, VGA_BLACK);
 }
+static void cmd_ps(void)
+{
+    vga_puts_color("\n  PID   STATE\n", VGA_YELLOW, VGA_BLACK);
+    vga_puts("  ----------------\n");
+
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        pcb_t *p = get_process_by_index(i);
+
+        if (p != 0 && p->state != PROCESS_UNUSED) {
+            vga_printf("  %d     ", p->pid);
+
+            if (p->state == PROCESS_READY) {
+                vga_puts("READY\n");
+            } else if (p->state == PROCESS_RUNNING) {
+                vga_puts("RUNNING\n");
+            } else if (p->state == PROCESS_TERMINATED) {
+                vga_puts("TERMINATED\n");
+            }
+        }
+    }
+}
+
+static void cmd_run(void)
+{
+    int pid_a = create_process(process_a);
+    int pid_b = create_process(process_b);
+
+    if (pid_a < 0 || pid_b < 0) {
+        vga_puts_color("  Failed to create processes.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    vga_printf("  Created process A: PID %d\n", pid_a);
+    vga_printf("  Created process B: PID %d\n", pid_b);
+cmd_ps();
+}
+
+static void process_a(void)
+{
+    while (true) {
+        vga_puts_color("A", VGA_LIGHT_GREEN, VGA_BLACK);
+
+        for (volatile uint32_t i = 0; i < 500000; i++) {
+        }
+    }
+}
+
+static void process_b(void)
+{
+    while (true) {
+        vga_puts_color("B", VGA_LIGHT_CYAN, VGA_BLACK);
+
+        for (volatile uint32_t i = 0; i < 1000000; i++) {
+        }
+    }
+}
 
 /* ---------------------------------------------------------------------------
  * Shell process
@@ -189,12 +252,23 @@ static void shell_run(void) {
         }
 
         /* Milestone stubs */
-        if (k_strcmp(cmd, "ps")      == 0 ||
-            k_strcmp(cmd, "kill")    == 0 ||
-            k_strcmp(cmd, "threads") == 0 ||
-            k_strcmp(cmd, "free")    == 0 ||
-            k_strcmp(cmd, "ls")      == 0 ||
-            k_strcmp(cmd, "cat")     == 0) {
+/* Stage 1: process listing */
+if (k_strcmp(cmd, "run") == 0) {
+    cmd_run();
+    continue;
+}
+
+if (k_strcmp(cmd, "ps") == 0) {
+    cmd_ps();
+    continue;
+}
+
+/* Milestone stubs */
+if (k_strcmp(cmd, "kill")    == 0 ||
+    k_strcmp(cmd, "threads") == 0 ||
+    k_strcmp(cmd, "free")    == 0 ||
+    k_strcmp(cmd, "ls")      == 0 ||
+    k_strcmp(cmd, "cat")     == 0) {
             vga_puts_color("  [TODO] This command is not yet implemented.\n",
                            VGA_YELLOW, VGA_BLACK);
             vga_puts("  Implement it as part of your lecture assignment.\n");
@@ -213,7 +287,11 @@ static void shell_run(void) {
 void kernel_main(void) {
     vga_init();
     kb_init();
-    print_splash();
+    process_init();
+scheduler_init();
+interrupts_init();
+__asm__ __volatile__("sti");
+print_splash();
     shell_run();
 
     /* Should never reach here */

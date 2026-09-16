@@ -13,14 +13,13 @@
 ; Entry: Real Mode setup
 ; ---------------------------------------------------------------------------
 start:
-    cli                ; Disable interrupts during setup
+    cli
     xor  ax, ax
     mov  ds, ax        ; Data Segment = 0
     mov  es, ax        ; Extra Segment = 0
     mov  ss, ax        ; Stack Segment = 0
     mov  sp, 0x7C00    ; Stack pointer just below our code
-    sti                ; Re-enable interrupts
-
+; sti
     ; Save drive number (BIOS stores it in dl)
     mov  [boot_drive], dl
 
