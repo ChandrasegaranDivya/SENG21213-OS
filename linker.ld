@@ -28,6 +28,8 @@ SECTIONS {
         *(.bss)
     } :data
 
+kernel_end = .;
+
     /DISCARD/ : {
         *(.eh_frame)
         *(.comment)

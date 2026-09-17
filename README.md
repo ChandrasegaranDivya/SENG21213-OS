@@ -191,3 +191,26 @@ xxd seng21213-os.img | grep -c aa55  # Verify boot signature
 ---
 
 *Happy hacking! Remember: every commercial OS started exactly like this.*
+
+
+## Stage 3 - Physical Memory Manager
+
+Implemented the Stage 3 Physical Memory Manager (PMM).
+
+### Features
+- BIOS E820 memory map parsing
+- 4 KB physical frame bitmap
+- First-fit pmm_alloc_frame()
+- pmm_free_frame()
+- meminfo shell command
+- memtest command for 100-frame allocation/free testing
+- Memory leak verification
+
+### Test
+Run make clean && make, then make run.
+In the kernel shell, use meminfo and memtest.
+The 100-frame test confirms that all allocated frames are returned successfully with no memory leak.
+
+### Stage 3 Tag
+
+v0.4-stage3

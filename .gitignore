@@ -1,2 +1,6 @@
 build/
 *.img
+*.bin
+*.elf
+*.o
+*.log

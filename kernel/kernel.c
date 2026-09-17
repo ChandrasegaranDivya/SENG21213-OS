@@ -1,4 +1,4 @@
-/* * SENG21213-OS :: Main Kernel  (Stage 0 – Foundations)
+/* * SENG21213-OS :: Main Kernel  (Stage 0 - Foundations)
  * File   : kernel/kernel.c
  *
  * PURPOSE
@@ -9,15 +9,15 @@
  *     4. Runs a minimal interactive shell ("ksh")
  *
  * ASSIGNMENT MILESTONES  (what YOU will add in later lectures)
- *   Lecture  9  – Process Management  →  process.h / process.c / scheduler.c
- *   Lecture 10  – Threads             →  thread.h  / thread.c
- *   Lecture 11  – Memory Management   →  pmm.h     / pmm.c / vmm.c
- *   Lecture 12  – File System         →  fs.h      / fs.c
+ *   Lecture  9  - Process Management  →  process.h / process.c / scheduler.c
+ *   Lecture 10  - Threads             →  thread.h  / thread.c
+ *   Lecture 11  - Memory Management   →  pmm.h     / pmm.c / vmm.c
+ *   Lecture 12  - File System         →  fs.h      / fs.c
  *
  * CODING CONVENTION
  *   - Prefix kernel-internal functions with k_ (e.g. k_strcmp)
  *   - All driver APIs live in their own .h/.c pair
- *   - NEVER call malloc – use the PMM you build in Lecture 11
+ *   - NEVER call malloc - use the PMM you build in Lecture 11
  * ============================================================================*/
 
 #include "vga.h"
@@ -30,6 +30,7 @@
 #include "thread.h"
 #include "scheduler.h"
 #include "interrupts.h"
+#include "pmm.h"
 
 /* ---------------------------------------------------------------------------
  * Forward declarations of shell commands
@@ -39,6 +40,7 @@ static void cmd_clear(void);
 static void cmd_about(void);
 static void cmd_echo(const char *args);
 static void cmd_mem(void);
+static void cmd_memtest(void);
 static void cmd_run(void);
 static void process_a(void);
 static void process_b(void);
@@ -107,7 +109,7 @@ static void print_splash(void) {
     vga_puts_color("  Stage 0: Kernel Foundations", VGA_LIGHT_CYAN, VGA_BLACK);
 
     vga_set_cursor(3, 2);
-    vga_puts_color("  Faculty of Engineering – Department of Software Engineering",
+    vga_puts_color("  Faculty of Engineering - Department of Software Engineering",
                    VGA_LIGHT_GREY, VGA_BLACK);
 
     vga_set_cursor(4, 2);
@@ -121,18 +123,18 @@ static void print_splash(void) {
     vga_set_cursor(8, 0);
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
     vga_puts("  Welcome! This kernel was compiled from source and booted entirely\n");
-    vga_puts("  from bare metal. There is no Linux or Windows underneath – only\n");
+    vga_puts("  from bare metal. There is no Linux or Windows underneath - only\n");
     vga_puts("  the code you and your team write.\n");
     vga_puts("\n");
     vga_puts("  Assignment milestones to implement:\n");
     vga_puts_color("    [L09] ", VGA_YELLOW, VGA_BLACK);
-    vga_puts("Process Management  – PCB, ready queue, round-robin scheduler\n");
+    vga_puts("Process Management  - PCB, ready queue, round-robin scheduler\n");
     vga_puts_color("    [L10] ", VGA_YELLOW, VGA_BLACK);
-    vga_puts("Threads & Sync      – kernel threads, mutex, semaphore\n");
+    vga_puts("Threads & Sync      - kernel threads, mutex, semaphore\n");
     vga_puts_color("    [L11] ", VGA_YELLOW, VGA_BLACK);
-    vga_puts("Memory Management   – physical page allocator, virtual memory\n");
+    vga_puts("Memory Management   - physical page allocator, virtual memory\n");
     vga_puts_color("    [L12] ", VGA_YELLOW, VGA_BLACK);
-    vga_puts("File System         – RAM disk, FAT-like directory structure\n");
+    vga_puts("File System         - RAM disk, FAT-like directory structure\n");
     vga_puts("\n");
 }
 
@@ -142,18 +144,19 @@ static void print_splash(void) {
 static void cmd_help(void) {
     vga_puts_color("\n  SENG21213-OS Shell Commands\n", VGA_YELLOW, VGA_BLACK);
     vga_puts("  ─────────────────────────────────────────────\n");
-    vga_puts("  help    – Show this help message\n");
-    vga_puts("  clear   – Clear the screen\n");
-    vga_puts("  about   – About this OS and course\n");
-    vga_puts("  echo    – Echo text to screen\n");
-    vga_puts("  mem     – Memory map (stub)\n");
+    vga_puts("  help    - Show this help message\n");
+    vga_puts("  clear   - Clear the screen\n");
+    vga_puts("  about   - About this OS and course\n");
+    vga_puts("  echo    - Echo text to screen\n");
+    vga_puts("  meminfo  - Show total / used / free physical memory\n");
+    vga_puts("  memtest  - Test 100-frame allocation and free\n");
     vga_puts_color("\n  Milestones (to implement):\n", VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_puts("  ps      – [L09] List processes\n");
-    vga_puts("  kill    – [L09] Terminate a process\n");
-    vga_puts("  threads – [L10] List kernel threads\n");
-    vga_puts("  free    – [L11] Show free memory\n");
-    vga_puts("  ls      – [L12] List files\n");
-    vga_puts("  cat     – [L12] Print file contents\n\n");
+    vga_puts("  ps      - [L09] List processes\n");
+    vga_puts("  kill    - [L09] Terminate a process\n");
+    vga_puts("  threads - [L10] List kernel threads\n");
+    vga_puts("  free    - [L11] Show free memory\n");
+    vga_puts("  ls      - [L12] List files\n");
+    vga_puts("  cat     - [L12] Print file contents\n\n");
 }
 
 static void cmd_clear(void) {
@@ -167,7 +170,7 @@ static void cmd_about(void) {
     vga_puts("  Bootloader   : Custom MBR (NASM)\n");
     vga_puts("  Kernel       : Freestanding C (GCC, no libc)\n");
     vga_puts("  VM Target    : QEMU (qemu-system-i386)\n");
-    vga_puts("  Course       : SENG 21213 – Sem 2\n");
+    vga_puts("  Course       : SENG 21213 - Sem 2\n");
     vga_puts("  Reference    : Stallings, OS: Internals & Design Principles\n\n");
 }
 
@@ -177,18 +180,66 @@ static void cmd_echo(const char *args) {
     vga_puts("\n");
 }
 
-static void cmd_mem(void) {
-    /* Stage 0 stub – students implement the real PMM in Lecture 11 */
-    vga_puts_color("\n  Memory Map (stub – implement PMM in Lecture 11)\n",
+
+static void cmd_mem(void)
+{
+    uint32_t total = pmm_get_total_frames();
+    uint32_t used = pmm_get_used_frames();
+    uint32_t free = pmm_get_free_frames();
+
+    uint32_t total_mb =
+        (total * PMM_PAGE_SIZE) / (1024 * 1024);
+
+    uint32_t used_mb =
+        (used * PMM_PAGE_SIZE) / (1024 * 1024);
+
+    uint32_t free_mb =
+        (free * PMM_PAGE_SIZE) / (1024 * 1024);
+
+    vga_puts_color("\n  Physical Memory Manager\n",
                    VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_puts("  ─────────────────────────────────────────────\n");
-    vga_puts("  0x00000000 – 0x000FFFFF  :  First 1 MB (reserved/BIOS)\n");
-    vga_puts("  0x00100000 – 0x00EFFFFF  :  Extended memory (usable ~14 MB)\n");
-    vga_puts("  0x00F00000 – 0x00FFFFFF  :  BIOS / ROM area\n");
-    vga_puts("  0xB8000    – 0xBFFFF     :  VGA frame buffer\n");
-    vga_puts_color("\n  TODO: Use BIOS int 0x15, EAX=0xE820 to get real memory map\n\n",
-                   VGA_YELLOW, VGA_BLACK);
+
+    vga_puts("  --------------------------------\n");
+
+    vga_printf("  Total Memory : %u MB\n", total_mb);
+    vga_printf("  Used Memory  : %u MB\n", used_mb);
+    vga_printf("  Free Memory  : %u MB\n", free_mb);
+
+    vga_printf("  Total Frames : %u\n", total);
+    vga_printf("  Used Frames  : %u\n", used);
+    vga_printf("  Free Frames  : %u\n", free);
+
+    vga_puts("\n");
 }
+static void cmd_memtest(void)
+{
+    uint32_t before = pmm_get_free_frames();
+    uint32_t frames[100];
+    int i;
+
+    for (i = 0; i < 100; i++)
+        frames[i] = pmm_alloc_frame();
+
+    uint32_t after_alloc = pmm_get_free_frames();
+
+    for (i = 0; i < 100; i++)
+        pmm_free_frame(frames[i]);
+
+    uint32_t after_free = pmm_get_free_frames();
+
+    vga_puts_color("\n  PMM 100-Frame Test\n", VGA_LIGHT_CYAN, VGA_BLACK);
+    vga_printf("  Before      : %u frames\n", before);
+    vga_printf("  After alloc : %u frames\n", after_alloc);
+    vga_printf("  After free  : %u frames\n", after_free);
+
+    if (before == after_free)
+        vga_puts_color("  RESULT: PASS - No memory leak\n", VGA_LIGHT_GREEN, VGA_BLACK);
+    else
+        vga_puts_color("  RESULT: FAIL - Memory leak detected\n", VGA_LIGHT_RED, VGA_BLACK);
+
+    vga_puts("\n");
+}
+
 static void cmd_ps(void)
 {
     vga_puts_color("\n  PID   STATE\n", VGA_YELLOW, VGA_BLACK);
@@ -353,8 +404,9 @@ static void shell_run(void) {
         if (k_strcmp(cmd, "help")  == 0) { cmd_help();  continue; }
         if (k_strcmp(cmd, "clear") == 0) { cmd_clear(); continue; }
         if (k_strcmp(cmd, "about") == 0) { cmd_about(); continue; }
-        if (k_strcmp(cmd, "mem")   == 0) { cmd_mem();   continue; }
-
+if (k_strcmp(cmd, "mem") == 0) { cmd_mem(); continue; }
+        if (k_strcmp(cmd, "meminfo") == 0) { cmd_mem(); continue; }
+        if (k_strcmp(cmd, "memtest") == 0) { cmd_memtest(); continue; }
         if (k_strncmp(cmd, "echo ", 5) == 0) {
             cmd_echo(k_ltrim(cmd + 5));
             continue;
@@ -403,23 +455,35 @@ if (k_strcmp(cmd, "kill")    == 0 ||
 }
 
 /* ---------------------------------------------------------------------------
- * Kernel entry point – called from kernel_entry.asm
+ * Kernel entry point - called from kernel_entry.asm
  * --------------------------------------------------------------------------*/
+
 void kernel_main(void) {
     vga_init();
+    vga_puts("TEST 1\n");
+
     kb_init();
+    vga_puts("TEST 2\n");
+
     process_init();
+    vga_puts("TEST 3\n");
+
     thread_init();
-scheduler_init();
-interrupts_init();
-__asm__ __volatile__("sti");
-print_splash();
+    vga_puts("TEST 4\n");
+
+    // scheduler_init();
+    pmm_init();
+    // interrupts_init();
+    // __asm__ __volatile__("sti");
+
+    vga_puts("TEST 5\n");
+
+    print_splash();
     shell_run();
 
     /* Should never reach here */
     __asm__ __volatile__("hlt");
 }
-
 static void race_worker(void *arg)
 {
     int id = (int)(uint32_t)arg;

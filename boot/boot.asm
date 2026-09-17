@@ -49,7 +49,36 @@ load_kernel:
 
     mov  si, msg_ok
     call print_rm
+    ; Get BIOS E820 memory map
+    xor ax, ax
+    mov es, ax
+    xor ebx, ebx
+    xor bp, bp
+    mov di, 0x5000
 
+e820_next:
+    mov eax, 0xE820
+    mov edx, 0x534D4150
+    mov ecx, 24
+    int 0x15
+    jc e820_done
+
+    cmp eax, 0x534D4150
+    jne e820_done
+
+    inc bp
+    add di, 24
+
+    cmp bp, 32
+    jae e820_done
+
+    test ebx, ebx
+    jnz e820_next
+
+e820_done:
+    mov [0x4FF0], bp
+
+enter_pm:
 ; ---------------------------------------------------------------------------
 ; Enter Protected Mode
 ; ---------------------------------------------------------------------------
