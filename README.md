@@ -38,7 +38,7 @@ seng21213-os/
 |---------|-----------|-------------|
 | L08 | ✅ Stage 0 – Boot + VGA + Shell | *Given to you* |
 | L09 | Process Management | `kernel/process.c`, `kernel/scheduler.c` |
-| L10 | Threads & Synchronisation | `kernel/thread.c`, `kernel/mutex.c` |
+| L10 | Threads & Synchronisation | `kernel/thread.c`, `kernel/mutex.c`, `kernel/semaphore.c` |
 | L11 | Memory Management | `kernel/pmm.c`, `kernel/vmm.c` |
 | L12 | File System | `kernel/fs.c`, `kernel/ramdisk.c` |
 

@@ -1,4 +1,4 @@
-# =============================================================================
+KERNEL_C_SRCS  := kernel/kernel.c \# =============================================================================
 # SENG21213-OS :: Makefile
 # =============================================================================
 #
@@ -59,6 +59,9 @@ KERNEL_C_SRCS  := kernel/kernel.c \
                    kernel/keyboard.c \
                    kernel/process.c \
                    kernel/scheduler.c \
+                   kernel/thread.c \
+                   kernel/mutex.c \
+                   kernel/semaphore.c \
                    kernel/interrupts.c
 
 KERNEL_C_OBJS  := $(patsubst kernel/%.c, build/%.o, $(KERNEL_C_SRCS))

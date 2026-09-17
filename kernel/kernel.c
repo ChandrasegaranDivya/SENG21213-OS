@@ -22,8 +22,12 @@
 
 #include "vga.h"
 #include "keyboard.h"
+#include "thread.h"
+#include "mutex.h"
+#include "semaphore.h"
 #include "../include/types.h"
 #include "process.h"
+#include "thread.h"
 #include "scheduler.h"
 #include "interrupts.h"
 
@@ -38,7 +42,28 @@ static void cmd_mem(void);
 static void cmd_run(void);
 static void process_a(void);
 static void process_b(void);
+static void thread_test(void *arg);
+static volatile int myglobal = 0;
+static mutex_t race_mutex;
+static volatile int race_done = 0;
+static volatile int race_finished[2] = {0, 0};
+static volatile int mutex_finished[2] = {0, 0};
+static volatile int race_phase_done = 0;
+static volatile int mutex_result_printed = 0;
+static void race_worker(void *arg);
+static void race_mutex_worker(void *arg);
+static semaphore_t empty_slots;
+static semaphore_t full_slots;
+static semaphore_t buffer_mutex;
 
+#define PC_BUFFER_SIZE 5
+
+static int pc_buffer[PC_BUFFER_SIZE];
+static int pc_in = 0;
+static int pc_out = 0;
+
+static void producer(void *arg);
+static void consumer(void *arg);
 extern void start_first_process(uint32_t *stack_pointer);
 /* ---------------------------------------------------------------------------
  * Utility: minimal string helpers (no libc in a freestanding kernel!)
@@ -188,6 +213,7 @@ static void cmd_ps(void)
 
 static void cmd_run(void)
 {
+
     int pid_a = create_process(process_a);
     int pid_b = create_process(process_b);
 
@@ -199,7 +225,41 @@ static void cmd_run(void)
 
     vga_printf("  Created process A: PID %d\n", pid_a);
     vga_printf("  Created process B: PID %d\n", pid_b);
-cmd_ps();
+
+    int tid = thread_create(thread_test, 0, pid_a);
+    vga_printf("  Created thread: TID %d\n", tid);
+
+    myglobal = 0;
+    mutex_init(&race_mutex);
+
+    sem_init(&empty_slots, PC_BUFFER_SIZE);
+    sem_init(&full_slots, 0);
+    sem_init(&buffer_mutex, 1);
+
+    pc_in = 0;
+    pc_out = 0;
+
+    int producer_tid = thread_create(producer, 0, pid_a);
+    int consumer_tid = thread_create(consumer, 0, pid_a);
+
+    vga_printf("  Producer thread: TID %d\n", producer_tid);
+    vga_printf("  Consumer thread: TID %d\n", consumer_tid);
+
+    int race_tid1 = thread_create(race_worker, (void *)0, pid_a);
+    int race_tid2 = thread_create(race_worker, (void *)1, pid_a);
+
+    int mutex_tid1 = thread_create(race_mutex_worker, (void *)0, pid_a);
+    int mutex_tid2 = thread_create(race_mutex_worker, (void *)1, pid_a);
+
+    vga_printf("  Race threads: TID %d, TID %d\n",
+               race_tid1, race_tid2);
+
+    vga_printf("  Mutex race threads: TID %d, TID %d\n",
+               mutex_tid1, mutex_tid2);
+
+    cmd_ps();
+
+    __asm__ __volatile__("sti");
 }
 
 static void process_a(void)
@@ -207,7 +267,7 @@ static void process_a(void)
     while (true) {
         vga_puts_color("A", VGA_LIGHT_GREEN, VGA_BLACK);
 
-        for (volatile uint32_t i = 0; i < 500000; i++) {
+        for (volatile uint32_t i = 0; i < 1000; i++) {
         }
     }
 }
@@ -222,6 +282,55 @@ static void process_b(void)
     }
 }
 
+
+static void thread_test(void *arg)
+{
+    (void)arg;
+
+    while (true) {
+        vga_puts_color("T", VGA_YELLOW, VGA_BLACK);
+
+        for (volatile uint32_t i = 0; i < 500000; i++) {
+        }
+    }
+}
+static void producer(void *arg)
+{
+    (void)arg;
+
+    for (int item = 1; item <= 10; item++) {
+
+        sem_wait(&empty_slots);
+        sem_wait(&buffer_mutex);
+
+        pc_buffer[pc_in] = item;
+        pc_in = (pc_in + 1) % PC_BUFFER_SIZE;
+
+        vga_printf("\nProducer: %d", item);
+
+        sem_signal(&buffer_mutex);
+        sem_signal(&full_slots);
+    }
+}
+
+static void consumer(void *arg)
+{
+    (void)arg;
+
+    for (int i = 0; i < 10; i++) {
+
+        sem_wait(&full_slots);
+        sem_wait(&buffer_mutex);
+
+        int item = pc_buffer[pc_out];
+        pc_out = (pc_out + 1) % PC_BUFFER_SIZE;
+
+        vga_printf("\nConsumer: %d", item);
+
+        sem_signal(&buffer_mutex);
+        sem_signal(&empty_slots);
+    }
+}
 /* ---------------------------------------------------------------------------
  * Shell process
  * --------------------------------------------------------------------------*/
@@ -262,7 +371,19 @@ if (k_strcmp(cmd, "ps") == 0) {
     cmd_ps();
     continue;
 }
+if (k_strcmp(cmd, "threads") == 0) {
+    vga_puts("TID  STATE       PID\n");
 
+    for (int i = 0; i < MAX_THREADS; i++) {
+        thread_t *t = get_thread_by_index(i);
+
+        if (t != 0 && t->state != THREAD_UNUSED) {
+            vga_puts("Thread found\n");
+        }
+    }
+
+    continue;
+}
 /* Milestone stubs */
 if (k_strcmp(cmd, "kill")    == 0 ||
     k_strcmp(cmd, "threads") == 0 ||
@@ -288,6 +409,7 @@ void kernel_main(void) {
     vga_init();
     kb_init();
     process_init();
+    thread_init();
 scheduler_init();
 interrupts_init();
 __asm__ __volatile__("sti");
@@ -296,4 +418,62 @@ print_splash();
 
     /* Should never reach here */
     __asm__ __volatile__("hlt");
+}
+
+static void race_worker(void *arg)
+{
+    int id = (int)(uint32_t)arg;
+
+    for (int i = 0; i < 10000; i++) {
+        int temp = myglobal;
+
+        for (volatile int j = 0; j < 1000; j++) {
+        }
+
+        myglobal = temp + 1;
+    }
+
+    race_finished[id] = 1;
+
+    if (race_finished[0] && race_finished[1] && !race_phase_done) {
+        race_phase_done = 1;
+
+        vga_printf("\nRace WITHOUT mutex: %d (expected 20000)\n",
+                   myglobal);
+
+        myglobal = 0;
+        mutex_init(&race_mutex);
+    }
+}
+
+static void race_mutex_worker(void *arg)
+{
+    int id = (int)(uint32_t)arg;
+
+    while (!race_phase_done) {
+        __asm__ __volatile__("hlt");
+    }
+
+    for (int i = 0; i < 10000; i++) {
+        mutex_lock(&race_mutex);
+
+        int temp = myglobal;
+
+        for (volatile int j = 0; j < 1000; j++) {
+        }
+
+        myglobal = temp + 1;
+
+        mutex_unlock(&race_mutex);
+    }
+
+    mutex_finished[id] = 1;
+
+    if (mutex_finished[0] && mutex_finished[1] &&
+        !mutex_result_printed) {
+        mutex_result_printed = 1;
+
+        vga_printf("\nRace WITH mutex: %d (expected 20000)\n",
+                   myglobal);
+    }
 }

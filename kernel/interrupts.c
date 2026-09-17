@@ -1,5 +1,6 @@
 #include "interrupts.h"
 #include "scheduler.h"
+#include "thread.h"
 
 #define PIC1_COMMAND 0x20
 #define PIC1_DATA    0x21
@@ -86,6 +87,7 @@ void pit_init(void)
 uint32_t *irq0_handler(uint32_t *current_esp)
 {
     uint32_t *next_esp = scheduler_tick(current_esp);
+
     outb(PIC1_COMMAND, 0x20);
     return next_esp;
 }
