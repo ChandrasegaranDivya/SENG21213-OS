@@ -78,6 +78,11 @@ e820_next:
 e820_done:
     mov [0x4FF0], bp
 
+; Enable A20 line
+in al, 0x92
+or al, 0x02
+out 0x92, al
+
 enter_pm:
 ; ---------------------------------------------------------------------------
 ; Enter Protected Mode
@@ -107,7 +112,7 @@ init_pm32:
     mov  gs, ax
 
     ; Set up a proper kernel stack at 0x90000
-    mov  ebp, 0x90000
+    mov ebp, 0x140000
     mov  esp, ebp
 
     ; Jump to the kernel entry point (loaded at 0x10000)

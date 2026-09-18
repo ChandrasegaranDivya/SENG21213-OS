@@ -31,6 +31,7 @@
 #include "scheduler.h"
 #include "interrupts.h"
 #include "pmm.h"
+#include "fs.h"
 
 /* ---------------------------------------------------------------------------
  * Forward declarations of shell commands
@@ -150,13 +151,17 @@ static void cmd_help(void) {
     vga_puts("  echo    - Echo text to screen\n");
     vga_puts("  meminfo  - Show total / used / free physical memory\n");
     vga_puts("  memtest  - Test 100-frame allocation and free\n");
-    vga_puts_color("\n  Milestones (to implement):\n", VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_puts("  ps      - [L09] List processes\n");
-    vga_puts("  kill    - [L09] Terminate a process\n");
-    vga_puts("  threads - [L10] List kernel threads\n");
-    vga_puts("  free    - [L11] Show free memory\n");
-    vga_puts("  ls      - [L12] List files\n");
-    vga_puts("  cat     - [L12] Print file contents\n\n");
+    vga_puts("\n  Process / Thread / Memory:\n");
+    vga_puts("  ps      - List processes\n");
+    vga_puts("  kill    - Terminate a process\n");
+    vga_puts("  threads - List kernel threads\n");
+    vga_puts("  free    - Show free memory\n");
+    vga_puts("\n  File System (L12):\n");
+    vga_puts("  ls      - List files\n");
+    vga_puts("  touch   - Create an empty file\n");
+    vga_puts("  cat     - Print file contents\n");
+    vga_puts("  write   - Append text to a file\n");
+    vga_puts("  rm      - Delete a file\n\n");
 }
 
 static void cmd_clear(void) {
@@ -313,6 +318,145 @@ static void cmd_run(void)
     __asm__ __volatile__("sti");
 }
 
+
+static void cmd_cat(const char *name)
+{
+    char buffer[512];
+    uint32_t i;
+    int fd;
+    int bytes_read;
+
+    if (name == 0 || name[0] == '\0') {
+        vga_puts("  Usage: cat <filename>\n");
+        return;
+    }
+
+    if (!fs_exists(name)) {
+        vga_puts("  File not found.\n");
+        return;
+    }
+
+    for (i = 0; i < sizeof(buffer); i++) {
+        buffer[i] = '\0';
+    }
+
+    fd = fs_open(name);
+
+    if (fd < 0) {
+        vga_puts("  Failed to open file.\n");
+        return;
+    }
+
+    bytes_read = fs_read(fd, buffer, sizeof(buffer) - 1, 0);
+
+    fs_close(fd);
+
+    if (bytes_read < 0) {
+        vga_puts("  Failed to read file.\n");
+        return;
+    }
+
+    buffer[bytes_read] = '\0';
+
+    vga_puts("  ");
+    vga_puts(buffer);
+    vga_puts("\n");
+}
+
+
+static void cmd_delete(const char *name)
+{
+    if (name == 0 || name[0] == '\0') {
+        vga_puts("  Usage: delete <filename>\n");
+        return;
+    }
+
+    if (fs_unlink(name)) {
+        vga_puts("  File deleted.\n");
+    } else {
+        vga_puts("  File not found.\n");
+    }
+}
+
+static void cmd_create(const char *name)
+{
+    if (name == 0 || name[0] == '\0') {
+        vga_puts("  Usage: create <filename>\n");
+        return;
+    }
+
+    if (fs_create(name)) {
+        vga_puts("  File created.\n");
+    } else {
+        vga_puts("  Failed to create file.\n");
+    }
+}
+
+
+static void cmd_write(const char *args)
+{
+    char name[FS_MAX_FILENAME];
+    const char *data;
+    uint32_t i;
+    uint32_t len;
+    int fd;
+    int bytes_written;
+
+    if (args == 0 || args[0] == '\0') {
+        vga_puts("  Usage: write <filename> <text>\n");
+        return;
+    }
+
+    i = 0;
+
+    while (args[i] != '\0' && args[i] != ' ' && i < FS_MAX_FILENAME - 1) {
+        name[i] = args[i];
+        i++;
+    }
+
+    name[i] = '\0';
+
+    while (args[i] == ' ') {
+        i++;
+    }
+
+    data = args + i;
+
+    if (name[0] == '\0' || data[0] == '\0') {
+        vga_puts("  Usage: write <filename> <text>\n");
+        return;
+    }
+
+    len = k_strlen(data);
+
+    if (len > FS_DIRECT_BLOCKS * FS_BLOCK_SIZE) {
+        vga_puts("  Text too long.\n");
+        return;
+    }
+
+    if (!fs_exists(name)) {
+        vga_puts("  File not found.\n");
+        return;
+    }
+
+    fd = fs_open(name);
+
+    if (fd < 0) {
+        vga_puts("  Failed to open file.\n");
+        return;
+    }
+
+    bytes_written = fs_write(fd, data, len, fs_size(fd));
+
+    fs_close(fd);
+
+    if (bytes_written == (int)len) {
+        vga_puts("  File written.\n");
+    } else {
+        vga_puts("  Failed to write file.\n");
+    }
+}
+
 static void process_a(void)
 {
     while (true) {
@@ -412,6 +556,43 @@ if (k_strcmp(cmd, "mem") == 0) { cmd_mem(); continue; }
             continue;
         }
 
+        if (k_strncmp(cmd, "cat ", 4) == 0) {
+            cmd_cat(k_ltrim(cmd + 4));
+            continue;
+        }
+
+        if (k_strcmp(cmd, "ls") == 0) {
+            fs_list();
+            continue;
+        }
+
+        if (k_strncmp(cmd, "create ", 7) == 0) {
+            cmd_create(k_ltrim(cmd + 7));
+            continue;
+        }
+
+        if (k_strncmp(cmd, "touch ", 6) == 0) {
+            cmd_create(k_ltrim(cmd + 6));
+            continue;
+        }
+
+        if (k_strncmp(cmd, "write ", 6) == 0) {
+            cmd_write(k_ltrim(cmd + 6));
+            continue;
+        }
+
+        if (k_strncmp(cmd, "delete ", 7) == 0) {
+            cmd_delete(k_ltrim(cmd + 7));
+            continue;
+        }
+
+
+        if (k_strncmp(cmd, "rm ", 3) == 0) {
+            cmd_delete(k_ltrim(cmd + 3));
+            continue;
+        }
+
+
         /* Milestone stubs */
 /* Stage 1: process listing */
 if (k_strcmp(cmd, "run") == 0) {
@@ -436,6 +617,8 @@ if (k_strcmp(cmd, "threads") == 0) {
 
     continue;
 }
+
+
 /* Milestone stubs */
 if (k_strcmp(cmd, "kill")    == 0 ||
     k_strcmp(cmd, "threads") == 0 ||
@@ -473,6 +656,7 @@ void kernel_main(void) {
 
     // scheduler_init();
     pmm_init();
+    fs_init();
     // interrupts_init();
     // __asm__ __volatile__("sti");
 

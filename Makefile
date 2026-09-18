@@ -63,7 +63,9 @@ KERNEL_C_SRCS  := kernel/kernel.c \
                    kernel/mutex.c \
                    kernel/semaphore.c \
                    kernel/interrupts.c \
-                   kernel/pmm.c
+                   kernel/pmm.c \
+                   kernel/ramdisk.c \
+                   kernel/fs.c
 
 KERNEL_C_OBJS  := $(patsubst kernel/%.c, build/%.o, $(KERNEL_C_SRCS))
 KERNEL_ELF     := build/kernel.elf

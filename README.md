@@ -214,3 +214,40 @@ The 100-frame test confirms that all allocated frames are returned successfully 
 ### Stage 3 Tag
 
 v0.4-stage3
+
+## Stage 4 - RAM Disk File System
+
+Implemented the Stage 4 RAM disk file system based on Lecture L12.
+
+### Features
+- 1 MB RAM disk
+- Superblock and filesystem metadata
+- Block bitmap and inode bitmap
+- Flat directory with file names
+- Inode-based file storage with direct blocks
+- File create, open, read, write, close and delete operations
+- Shell commands: ls, touch, cat, write, rm
+- Append support for the write command
+
+### Test
+
+Run:
+
+make clean && make
+make run
+
+In the kernel shell, test the file system using:
+
+touch test.txt
+write test.txt Hello
+write test.txt World
+cat test.txt
+ls
+rm test.txt
+ls
+
+The file system was tested with multiple files for creation, writing, reading and deletion.
+
+### Stage 4 Tag
+
+v0.5-stage4
